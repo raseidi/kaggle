@@ -99,8 +99,8 @@ df_test = pd.read_csv('test.csv')
 df_test.info()
 df_test.drop(['Cabin', 'Age', 'Ticket', 'Name'], axis=1, inplace=True)
 
-df_test.Fare = df.Fare.apply(lambda x: np.log(x) if x != 0 else x)
-df_test.Sex = df.Sex.apply(lambda x: 0 if x == 'female' else 1)
+df_test.Fare = df_test.Fare.apply(lambda x: np.log(x) if x != 0 else x)
+df_test.Sex = df_test.Sex.apply(lambda x: 0 if x == 'female' else 1)
 
 df_test['Embarked_S'] = df_test.Embarked.apply(lambda x: 1 if x == 'S' else 0)
 df_test['Embarked_C'] = df_test.Embarked.apply(lambda x: 1 if x == 'C' else 0)
@@ -111,17 +111,21 @@ df_test['Pclass_2'] = df_test.Pclass.apply(lambda x: 1 if x == '2' else 0)
 df_test['Pclass_3'] = df_test.Pclass.apply(lambda x: 1 if x == '3' else 0)
 
 df_test.drop(['Embarked', 'Pclass'], axis=1, inplace=True)
+df_test.set_index('PassengerId', inplace=True)
 df_test.info()
 df_test.fillna(0, inplace=True)
 df_test.info()
 
-X_test = df_test.drop('Survived', axis=1)
-y_test = df_test.Survived
 
 clf_final = RandomForestClassifier()
 clf_final.fit(X_train, y_train)
-clf_final.predict(X_test)
+df_test['y_pred'] = clf_final.predict(df_test)
 
-from sklearn.metrics import accuracy_score
+final_pred = df_test[['y_pred']].copy()
+final_pred.reset_index(inplace=True)
+final_pred.rename({'y_pred': 'Survived'}, axis=1, inplace=True)
+final_pred.to_csv('predictions.csv', index=False)
 
-accuracy_score(y_test, clf_final.predict(X_test))
+
+
+
