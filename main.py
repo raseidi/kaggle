@@ -6,9 +6,10 @@ import matplotlib.pyplot as plt
 original_train = pd.read_csv('train.csv')
 original_test = pd.read_csv('test.csv')
 
-original_train.drop(['Name', 'Cabin', 'Ticket',\
-    'Embarked', 'Pclass', 'Age', 'Fare'],
-    axis=1, inplace=True)
+original_train.info()
+original_train['FareInterval'] = pd.cut(original_train.Fare, 3)
+original_train[['FareInterval', 'Survived']].groupby(['FareInterval'], as_index=False).mean().sort_values(by='FareInterval', ascending=True)
+original_train[original_train.Fare > 340].Survived
 
 tmp = original_train.copy()
 tmp['AgeInterval'] = pd.cut(original_train.Fare, 3)
@@ -40,7 +41,6 @@ sns.distplot(df.Fare)
 sns.distplot(df.Fare.apply(lambda x: np.log(x) if x != 0 else x))
 plt.show()
 df.Fare = df.Fare.apply(lambda x: np.log(x) if x != 0 else x)
-rr(), annot=True, cmap="coolwarm")
 plt.show()
 
 # df = df.sample(frac=1) # shuffling dataset

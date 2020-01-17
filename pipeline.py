@@ -10,39 +10,11 @@ from sklearn.model_selection import RandomizedSearchCV
 
 import preproc
 
-def feat_imp(scores, feature_names, save_path=None):
-    '''
-        scores: list of feature importances (if scores are retrieved
-        from cross validation, pass scores like:
-            [fi.feature_importances_ for fi in scores['estimator']]
-        )
-        feature_names: columns of original dataframe
-        save_path: None is you do not wish to save it, the path otherwise
-        returns feature importances (mean for cv) as dataframe
-    '''
-    scores = np.array(scores)
-    df = pd.DataFrame(scores if scores.ndim == 1 else scores[0], index=feature_names, columns=['Importance'])
-    if scores.ndim > 1:
-        for estimator in scores[1:]:
-            df = (df + pd.DataFrame(estimator,
-                                    index=feature_names,
-                                    columns=['Importance']))
-
-    df = df/scores.ndim
-    df = df.sort_values(by='Importance', ascending=False)
-    df.reset_index(inplace=True)
-    df.rename(columns={'index': 'Feature'}, inplace=True)
-
-    return df
-
-def plot_feat_imp(df, x, y, n_max=5):
-    df = df.head(n=n_max)
-    g = sns.barplot(x=x, y=y, data=df)
-    g.set_xlabel('Importance')
-    g.set_ylabel('Feature')
-    g.set_title('Feature importance')
-    # g.figure.savefig('{}.png'.format(y), bbox_inches="tight")
-    plt.show()
+# not sure if this is the best way for importing
+# methods from another directory
+import sys
+sys.path.insert(1, '../data_visualization/src')
+import my_plots, format_values
 
 df_train = preproc.pre_process_v2('train.csv')
 df_test = preproc.pre_process_v2('test.csv')
@@ -58,20 +30,21 @@ def validating(X_train, y_train):
 
 X_train = df_train.drop('Survived', axis=1)
 y_train = df_train.Survived
-rf_fi = RandomForestClassifier()
-rf_fi.fit(X_train, y_train)
-rf_fi.feature_importances_
-
 # withoug feature selection
 cv_results = validating(X_train, y_train)
 
-fi = feat_imp(rf_fi.feature_importances_, X_train.columns)
-plot_feat_imp(fi, 'Importance', 'Feature')
+# analysing feature importances from random forest
+rf_fi = RandomForestClassifier()
+rf_fi.fit(X_train, y_train)
+rf_fi.feature_importances_
+# methods from another repository
+fi = format_values.feat_imp(rf_fi.feature_importances_, X_train.columns)
+my_plots.plot_feat_imp(fi, 'Importance', 'Feature')
 
 # with feature selection
-X_train = X_train[fi.head(6).Feature.values]
-cv_results = validating(X_train, y_train)
-cv_results
+X_train_ = X_train[fi.head(6).Feature.values]
+cv_results = validating(X_train_, y_train)
+# Not that relevant. Better to ignore this step. 
 
 #............. tuning .............#
 import scipy.stats as stats
@@ -101,3 +74,4 @@ final_pred = df_test.copy()
 final_pred['Survived'] = clf.predict(df_test)
 final_pred.reset_index(inplace=True)
 final_pred[['PassengerId', 'Survived']].to_csv('predictions/predictions_v4.csv', index=False)
+
