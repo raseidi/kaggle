@@ -16,7 +16,8 @@ After the preprocessing step, an SVM was tunned via the Random Search strategy, 
  
 ```
 'C': 7110.060148342983,
-'gamma': 0.01177348670454452, 'kernel': 'rbf'
+'gamma': 0.01177348670454452,
+'kernel': 'rbf'
 ```
 
 Before submiting the final test, the model employed was validated through a 5-fold cros validation.
