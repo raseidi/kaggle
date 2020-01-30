@@ -3,20 +3,117 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
+from sklearn.feature_selection import VarianceThreshold
+
 pd.options.display.max_rows = 81
 
 os.chdir('house_prices/')
 
-df_ = pd.read_csv('data/train.csv')
+train = pd.read_csv('data/train.csv')
+train['Dataset'] = 'train'
+y = train.SalePrice
+train.drop('SalePrice', axis=1, inplace=True)
+test = pd.read_csv('data/test.csv')
+test['Dataset'] = 'test'
+
+df_ = pd.concat([train, test])
 df = df_.copy()
+len(train) + len(test) == len(df)
+
 df.describe()
 df.info()
+df.set_index(['Id', 'Dataset'], inplace=True)
 
+''' dropping all columns that have missing values '''
+missing = df.isnull().sum()
+missing[missing > 0].index
+df.drop(missing[missing > 0].index, axis=1, inplace=True)
+
+''' encoding categorical variables '''
+categorical = [f for f in df.columns if df.dtypes[f] == 'object']
+categorical = sorted(categorical)
+
+for c in categorical:
+    df[c] = LabelEncoder().fit_transform(df[c])
+
+selector = VarianceThreshold(0.15)
+selector.fit(df)
+# get support returns true for columns with var > 0.15
+df.drop(df.columns[~selector.get_support()], axis=1, inplace=True)
+
+df.reset_index(inplace=True)
+train = df[df.Dataset == 'train'].copy()
+train['SalePrice'] = y.copy()
+test = df[df.Dataset == 'test'].copy()
+
+train.drop('Dataset', axis=1, inplace=True)
+train.set_index('Id', inplace=True)
+test.drop('Dataset', axis=1, inplace=True)
+test.set_index('Id', inplace=True)
+
+train.loc[:, 'SalePrice'] = train.SalePrice.apply(np.log)
+# sns.distplot(train.loc[:, 'SalePrice'])
+# plt.show()
+
+
+#................... validation ...................#
+import sys
+from sklearn.model_selection import cross_validate
+from sklearn.ensemble import RandomForestRegressor
+
+sys.path.insert(1, '../../regression_plots/src')
+# import my_plots, format_values
+
+X = train.drop('SalePrice', axis=1).copy()
+y = train.loc[:, 'SalePrice'].copy()
+
+cv_scores = cross_validate(RandomForestRegressor(n_estimators=100),
+                           X, y,
+                           scoring='r2', cv=5, return_estimator=True)
+
+rf_fi = cv_scores['estimator'][0].feature_importances_
+
+# fi = format_values.feat_imp(rf_fi, X.columns)
+# my_plots.plot_feat_imp(fi, 'Importance', 'Feature')
+
+# print(cross_validate.__doc__)
+#................... validation ...................#
+
+#................... employing final model  ...................#
+import scipy.stats as stats
+
+reg = RandomForestRegressor(n_estimators=300)
+cv_results = cross_validate(reg, X, y, cv=10, scoring='neg_mean_squared_error')
+
+# y.apply(lambda x: round(np.e ** x))
+# tmp = pd.read_csv('data/train.csv')
+# set(tmp.SalePrice.values == y.apply(lambda x: round(np.e ** x)))
+
+reg.fit(X, y)
+test_ = test.copy()
+test_['SalePrice'] = reg.predict(test)
+test_['SalePrice'] = test_['SalePrice'].apply(lambda x: round(np.e ** x))
+test_.reset_index(inplace=True)
+test_[['Id', 'SalePrice']].to_csv('predictions.csv', index=False)
+
+
+
+
+
+
+#................... employing final model  ...................#
+
+'''
+Dummy way :p
+after 200 lines of code I realized I was checking column by column, and that is not
+feasible. Thus, the code above is written smarter and cleaner.
 #................... handling missing values ...................#
 
 # dropping columns with many missing values;
 # except for FireplaceQu columns, which can be replaced
 # by true/false (there is a fireplace or not)
+df.columns[df.isna().any()]
 df.drop(['Alley', 'PoolQC', 'Fence', 'MiscFeature'], axis=1, inplace=True)
 df.FireplaceQu.fillna(0, inplace=True)
 df.loc[:,'FireplaceQu'] = df.FireplaceQu.apply(lambda x: x if x == 0 else 1)
@@ -24,7 +121,7 @@ df.loc[:,'FireplaceQu'] = df.FireplaceQu.apply(lambda x: x if x == 0 else 1)
 print(*df.columns[df.isnull().any()], sep='\n')
 # first attempt just dropping all lines with missing values;
 # this way we lose 366 samples.
-df.dropna(axis=0, inplace=True)
+# df.dropna(axis=0, inplace=True)
 
 #................... handling missing values ...................#
 
@@ -141,6 +238,7 @@ df.loc[:, 'LotConfig'] = df.LotConfig.map(cat_to_num)
 #df.groupby('LotConfig').SalePrice.std().sort_values()
 
 df.Utilities.value_counts()
+df.Utilities.ent()
 drop_columns.append('Utilities')
 
 # droping because there is a majority value (Lvl)
@@ -152,13 +250,13 @@ drop_columns.append('LandContour')
 df.LotShape.value_counts()
 #df.groupby('LotShape')['SalePrice'].mean().sort_values()
 #df.groupby('LotShape')['SalePrice'].std().sort_values()
-''' ive just find a easier way to do this
-df.loc[:, 'LotShape'] = df.LotShape.map({
-    'Reg': 0,
-    'IR1': 1,
-    'IR2': 1,
-    'IR3': 1 # IRs are very similar, then we assume they are equivalent
-})'''
+# ive just find a easier way to do this
+# df.loc[:, 'LotShape'] = df.LotShape.map({
+#     'Reg': 0,
+#     'IR1': 1,
+#     'IR2': 1,
+#     'IR3': 1 # IRs are very similar, then we assume they are equivalent
+# })
 df.loc[:, 'LotShape'] = np.where(
     df.LotShape.str.contains('IR'), 1, 0
 )
@@ -184,31 +282,4 @@ df.set_index('Id', inplace=True)
 df.drop(columns=df.select_dtypes('object').columns, axis=1, inplace=True)
 #................... handling categorical values ...................#
 
-
-#................... validation ...................#
-from sklearn.svm import SVR
-from sklearn.model_selection import cross_validate
-from sklearn.ensemble import RandomForestRegressor
-
-final_df = df.copy()
-X = final_df.drop('SalePrice', axis=1).copy()
-y = final_df.loc[:, 'SalePrice']
-
-cv_scores = cross_validate(RandomForestRegressor(),
-                           X, y,
-                           scoring='r2')
-# print(cross_validate.__doc__)
-#................... validation ...................#
-
-#................... employing final model  ...................#
-#................... employing final model  ...................#
-
-train = preproc('data/train.csv') 
-test = preproc('data/test.csv')
-
-reg = RandomForestRegressor()
-reg.fit(train.drop('SalePrice', axis=1), train.SalePrice)
-reg.predict(test)
-test['SalePrice'] = reg.predict(test)
-test.loc[:,'SalePrice'].to_csv('predictions.csv')
-
+'''
