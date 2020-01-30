@@ -43,3 +43,5 @@ df.loc[:, 'ExterQual'] = df.ExterQual.map({
 })
 df = pd.get_dummies(df, columns=['ExterQual'])
 ```
+
+ref: https://pbpython.com/categorical-encoding.html
