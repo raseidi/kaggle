@@ -5,12 +5,14 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
 from sklearn.feature_selection import VarianceThreshold
+plt.style.use('ggplot')
 
 pd.options.display.max_rows = 1000
 pd.options.display.max_columns = 20
 os.chdir('house_prices/')
 
 train = pd.read_csv('data/train.csv')
+train_ = train.copy()
 train['Dataset'] = 'train'
 y = train.SalePrice
 train.drop('SalePrice', axis=1, inplace=True)
@@ -25,6 +27,10 @@ df.info()
 df.set_index(['Id', 'Dataset'], inplace=True)
 
 ''' dropping all columns that have missing values '''
+# df.TotalBsmtSF.describe()
+# df.TotalBsmtSF.plot.hist()
+# plt.show()
+df.TotalBsmtSF.fillna(df.TotalBsmtSF.median(),inplace=True)
 missing = df.isnull().sum()
 missing[missing > 0].index
 df.drop(missing[missing > 0].index, axis=1, inplace=True)
@@ -158,14 +164,49 @@ df = pd.get_dummies(df, columns=one_hot_encoding)
 
 #................ handling numerical data ................#
 
-# numerical = [c for c in df.columns if not c.startswith('cat_')]
+numerical = [c for c in df.columns if not c.startswith('cat_')]
 # tmp['YearBuilt_interval'] = pd.cut(df.YearBuilt, 5)
 # tmp[['YearBuilt_interval', 'SalePrice']].groupby('YearBuilt_interval').mean().sort_values(by='SalePrice')
 # df.YearBuilt.plot.hist()
 # plt.show()
+# df.loc[(1, 'train'), numerical]
+# df.loc[:, 'LotArea'] = df.loc[:, 'LotArea'].apply(np.log)
+# df.loc[:, 'GrLivArea'] = df.loc[:, 'GrLivArea'].apply(np.log)
+# numerical.remove('LotArea')
+# numerical.remove('GrLivArea')
+# df.drop(['YearBuilt', 'YearRemodAdd', 'YrSold'], axis=1, inplace=True)
+
+df.GrLivArea = df.GrLivArea.apply(np.log)
+df.TotalBsmtSF = df.TotalBsmtSF.apply(lambda x: np.log(x) if x else x)
+df.loc[:, 'OverallQual'] = pd.cut(df.OverallQual, 3, labels=[0, 1, 2])
+df = pd.get_dummies(df, columns=['OverallQual'])
+df.loc[:, 'TotRmsAbvGrd'] = pd.cut(df.TotRmsAbvGrd, 4, labels=[0, 1, 2, 3])
+df.loc[:, 'YearRemodAdd'] = pd.cut(df.YearRemodAdd, 3, labels=[0, 1, 2]).astype('int')
+df = pd.get_dummies(df, columns=['TotRmsAbvGrd'])
+df.loc[:, '1stFlrSF'] = df['1stFlrSF'].apply(lambda x: np.log(x) if x else x)
+df.loc[:, '2ndFlrSF'] = df['2ndFlrSF'].apply(lambda x: np.log(x) if x else x)
+# Analyzing YearBuilt we noticed that values > 1982 are very
+# higher than other. Thus, we will transform this column
+# into binary
+# train_.loc[:, 'Year_tmp'] = pd.cut(train_[var], 10) #, labels=range(10))
+df.loc[:, 'YearBuilt'] = np.where(
+    df.loc[:, 'YearBuilt'] > 1982, 1, 0
+)
+# From here, Neighborhood column looks really useless. Drop it.
+df.drop(['MSSubClass', 'OpenPorchSF', 'BedroomAbvGr',
+         'LotArea', 'YrSold'], axis=1, inplace=True)
+# cat_Neighborhood
+# numerical = [c for c in df.columns if not c.startswith('cat_')]
+# df.loc[(1, 'train'), :].sort_values()
+
+# sns.heatmap(df[numerical].corr())
+# var='YrSold'
+# df[var].describe()
+# sns.swarmplot(x='Neighborhood', y='SalePrice', hue='Neighborhood',
+#                 data=train_)
+# plt.show()
+# print(*df.columns.sort_values(), sep='\n')
 #................ handling numerical data ................#
-
-
 
 #................ splitting into train/test ................#
 df.reset_index(inplace=True)
@@ -187,13 +228,13 @@ y = train.SalePrice
 import scipy.stats as stats
 from sklearn.svm import SVR
 from sklearn.linear_model import Lasso
-from sklearn.model_selection import RandomizedSearchCV
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
+from sklearn.ensemble import GradientBoostingRegressor
 
 gb_params = {
     'loss': ['ls', 'lad', 'huber'],
-    'n_estimators': [100, 150, 200, 300],
-    'min_samples_split': [2, 4, 6, 10],
+    'n_estimators': [100, 150, 200, 300, 500],
+    'min_samples_split': [2, 4, 6, 10, 16, 20, 50],
     'max_features': ['auto', 'sqrt', 'log2', None]
 }
 
@@ -211,10 +252,10 @@ lasso_params = {
 }
 
 n_iter_search = 30
-rf_rs = RandomizedSearchCV(
+rf_rs = GridSearchCV(
     RandomForestRegressor(),
-    param_distributions=rf_params,
-    n_iter=n_iter_search, scoring='neg_mean_squared_error'
+    param_grid=rf_params,
+    cv=5, scoring='neg_mean_squared_error'
 )
 
 svr_rs = RandomizedSearchCV(
@@ -229,15 +270,16 @@ lasso_rs = RandomizedSearchCV(
     n_iter=n_iter_search, scoring='neg_mean_squared_error'
 )
 
-gb_rs = RandomizedSearchCV(
+gb_rs = GridSearchCV(
     GradientBoostingRegressor(),
-    param_distributions=gb_params,
-    n_iter=n_iter_search, scoring='neg_mean_squared_error'
+    param_grid=gb_params,
+    scoring='neg_mean_squared_error',
+    cv=5
 )
 
-rf_rs = rf_rs.fit(X, y)
-svr_rs = svr_rs.fit(X, y)
-lasso_rs = lasso_rs.fit(X, y)
+# rf_rs = rf_rs.fit(X, y)
+# svr_rs = svr_rs.fit(X, y)
+# lasso_rs = lasso_rs.fit(X, y)
 # gb_rs = gb_rs.fit(X, y)
 
 # rf_rs.best_params_
@@ -259,6 +301,28 @@ gb_bestparams = {
 }
 
 #................ tuning ................#
+
+#................ feature selection ................#
+import sys
+sys.path.insert(1, '../../data_visualization/src')
+import my_plots, format_values
+
+reg = RandomForestRegressor(**rf_bestparams)
+# reg = GradientBoostingRegressor(**gb_bestparams)
+# reg.fit(X, y)
+
+format_values.(reg.feature_importances_)
+fi = format_values.feat_imp(reg.feature_importances_, X.columns)
+fi.sort_values(by='Importance', inplace=True)
+drop = fi[:-23].Feature.values
+drop = [d for d in drop if not d.startswith('cat_')]
+columns = fi[~fi.Feature.isin(drop)].Feature.values
+
+my_plots.plot_feat_imp(fi, 'Importance', 'Feature')
+
+X = X[columns].copy()
+test = test[columns].copy()
+#................ feature selection ................#
 
 #................ validating ................#
 from sklearn.model_selection import cross_validate
@@ -294,13 +358,17 @@ scores = {
     'gb': gb_cv['test_score'].mean() ** 2
 }
 pd.DataFrame([scores]).loc[0].sort_values()
+
 #................ validating ................#
 
+
 #................ model evaluation ................#
+
 # reg = Lasso(alpha=lasso_bestparams['alpha'])
-reg = RandomForestRegressor(**rf_bestparams)
-# reg = GradientBoostingRegressor(**gb_bestparams)
+# reg = RandomForestRegressor(**rf_bestparams)
+reg = GradientBoostingRegressor(**gb_bestparams)
 reg.fit(X, y)
+
 
 test_ = test.copy()
 test_['SalePrice'] = reg.predict(test)
