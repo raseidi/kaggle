@@ -209,6 +209,28 @@ df.drop(['MSSubClass', 'OpenPorchSF', 'BedroomAbvGr',
 #................ handling numerical data ................#
 
 #................ splitting into train/test ................#
+
+# X = df.drop('GrLivArea', axis=1)
+# y = df['GrLivArea']
+
+# reg = RandomForestRegressor(**rf_bestparams)
+# cv = cross_validate(reg, X, y,
+#                     cv=5, scoring='neg_mean_squared_error',
+#                     return_estimator=True)
+# tmp = cv['estimator'][0].feature_importances_
+# for i in cv['estimator']:
+#     tmp += i.feature_importances_
+
+# tmp /= 5
+# fi = pd.DataFrame({
+#     'Feature': X.columns,
+#     'Importance': tmp
+# })
+# fi.sort_values(by='Importance')
+# columns = fi[fi.Importance > 2e-4].Feature.values
+# columns = [c for c in columns if not c.startswith('cat_')]
+# df = df.drop(columns, axis=1)
+
 df.reset_index(inplace=True)
 train = df[df.Dataset == 'train'].copy()
 train['SalePrice'] = y.copy()
@@ -222,6 +244,7 @@ test.set_index('Id', inplace=True)
 train.loc[:, 'SalePrice'] = train.SalePrice.apply(np.log)
 X = train.drop('SalePrice', axis=1)
 y = train.SalePrice
+
 #................ splitting into train/test ................#
 
 #................ tuning ................#
@@ -229,7 +252,7 @@ import scipy.stats as stats
 from sklearn.svm import SVR
 from sklearn.linear_model import Lasso
 from sklearn.model_selection import RandomizedSearchCV, GridSearchCV
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 
 gb_params = {
     'loss': ['ls', 'lad', 'huber'],
@@ -239,7 +262,12 @@ gb_params = {
 }
 
 rf_params = {
-    'n_estimators': [100, 150, 200, 300]
+    'n_estimators': [100, 150, 200, 300, 500],
+    'min_samples_split': [2, 4, 8],
+    'max_depth': [4, 5, 6, 7, 8, None],
+    'min_samples_leaf': [1, 2, 4, 8],
+    'max_features': ['auto', 'sqrt', 'log2'],
+    'criterion' :['gini', 'entropy']
 }
 
 svr_params = {
@@ -283,7 +311,13 @@ gb_rs = GridSearchCV(
 # gb_rs = gb_rs.fit(X, y)
 
 # rf_rs.best_params_
-rf_bestparams = {'n_estimators': 200}
+rf_bestparams = {
+    'max_depth': 150,
+    'min_samples_leaf': 1,
+    'min_samples_split': 2,
+    'n_estimators': 300
+}
+
 # svr_rs.best_params_
 svr_bestparams = {
     'C': 10512.841195085914,
@@ -293,11 +327,17 @@ svr_bestparams = {
 # lasso_rs.best_params_
 lasso_bestparams = {'alpha': 6.34105969106034e-05}
 # gb_rs.best_params_
+# gb_bestparams = {
+#     'n_estimators': 300,
+#     'min_samples_split': 6,
+#     'max_features': 'log2',
+#     'loss': 'huber'
+# }
 gb_bestparams = {
-    'n_estimators': 300,
-    'min_samples_split': 6,
+    'loss': 'huber',
     'max_features': 'log2',
-    'loss': 'huber'
+    'min_samples_split': 10,
+    'n_estimators': 500
 }
 
 #................ tuning ................#
@@ -309,36 +349,37 @@ import my_plots, format_values
 
 reg = RandomForestRegressor(**rf_bestparams)
 # reg = GradientBoostingRegressor(**gb_bestparams)
-# reg.fit(X, y)
+reg.fit(X, y)
 
-format_values.(reg.feature_importances_)
-fi = format_values.feat_imp(reg.feature_importances_, X.columns)
-fi.sort_values(by='Importance', inplace=True)
-drop = fi[:-23].Feature.values
-drop = [d for d in drop if not d.startswith('cat_')]
-columns = fi[~fi.Feature.isin(drop)].Feature.values
+tmp = pd.DataFrame({
+    'Feature': X.columns,
+    'Importance': reg.feature_importances_
+})
+tmp.sort_values(by='Importance')
 
-my_plots.plot_feat_imp(fi, 'Importance', 'Feature')
+# drop = fi[:-23].Feature.values
+# drop = [d for d in drop if not d.startswith('cat_')]
+# columns = fi[~fi.Feature.isin(drop)].Feature.values
 
-X = X[columns].copy()
-test = test[columns].copy()
+# my_plots.plot_feat_imp(fi, 'Importance', 'Feature')
+
+# X = X[columns].copy()
+# test = test[columns].copy()
 #................ feature selection ................#
 
 #................ validating ................#
 from sklearn.model_selection import cross_validate
 
 rf_cv = cross_validate(
-    RandomForestRegressor(
-        n_estimators=rf_bestparams['n_estimators']
-    ),
+    RandomForestRegressor(**rf_bestparams),
     X, y,
     scoring='neg_mean_squared_error', cv=5,
 )
-svr_cv = cross_validate(
-    SVR(**svr_bestparams),
-    X, y,
-    scoring='neg_mean_squared_error', cv=5,
-)
+# svr_cv = cross_validate(
+#     SVR(**svr_bestparams),
+#     X, y,
+#     scoring='neg_mean_squared_error', cv=5,
+# )
 lasso_cv = cross_validate(
     Lasso(
         alpha=lasso_bestparams['alpha']   
@@ -353,7 +394,7 @@ gb_cv = cross_validate(
 )
 scores = {
     'rf': rf_cv['test_score'].mean() ** 2,
-    'svr': svr_cv['test_score'].mean() ** 2,
+    # 'svr': svr_cv['test_score'].mean() ** 2,
     'lasso': lasso_cv['test_score'].mean() ** 2,
     'gb': gb_cv['test_score'].mean() ** 2
 }
@@ -365,10 +406,9 @@ pd.DataFrame([scores]).loc[0].sort_values()
 #................ model evaluation ................#
 
 # reg = Lasso(alpha=lasso_bestparams['alpha'])
-# reg = RandomForestRegressor(**rf_bestparams)
 reg = GradientBoostingRegressor(**gb_bestparams)
+# reg = RandomForestRegressor(**rf_bestparams)
 reg.fit(X, y)
-
 
 test_ = test.copy()
 test_['SalePrice'] = reg.predict(test)
@@ -376,8 +416,6 @@ test_['SalePrice'] = reg.predict(test)
 test_['SalePrice'] = test_['SalePrice'].apply(lambda x: np.floor(np.exp(x)))
 test_.reset_index(inplace=True)
 test_[['Id', 'SalePrice']].to_csv('predictions_v2.csv', index=False)
-
-
 
 
 #................ model evaluation ................#
