@@ -198,7 +198,6 @@ df.drop(['MSSubClass', 'OpenPorchSF', 'BedroomAbvGr',
 # cat_Neighborhood
 # numerical = [c for c in df.columns if not c.startswith('cat_')]
 # df.loc[(1, 'train'), :].sort_values()
-
 # sns.heatmap(df[numerical].corr())
 # var='YrSold'
 # df[var].describe()
@@ -244,7 +243,6 @@ test.set_index('Id', inplace=True)
 train.loc[:, 'SalePrice'] = train.SalePrice.apply(np.log)
 X = train.drop('SalePrice', axis=1)
 y = train.SalePrice
-
 #................ splitting into train/test ................#
 
 #................ tuning ................#
@@ -404,9 +402,9 @@ pd.DataFrame([scores]).loc[0].sort_values()
 
 
 #................ model evaluation ................#
-
+from sklearn.linear_model import Lasso
 # reg = Lasso(alpha=lasso_bestparams['alpha'])
-reg = GradientBoostingRegressor(**gb_bestparams)
+# reg = GradientBoostingRegressor(**gb_bestparams)
 # reg = RandomForestRegressor(**rf_bestparams)
 reg.fit(X, y)
 
@@ -415,7 +413,6 @@ test_['SalePrice'] = reg.predict(test)
 # test_['SalePrice'] = test_['SalePrice'].apply(lambda x: round(np.e ** x))
 test_['SalePrice'] = test_['SalePrice'].apply(lambda x: np.floor(np.exp(x)))
 test_.reset_index(inplace=True)
-test_[['Id', 'SalePrice']].to_csv('predictions_v2.csv', index=False)
-
+test_[['Id', 'SalePrice']].to_csv('predictions.csv', index=False)
 
 #................ model evaluation ................#
