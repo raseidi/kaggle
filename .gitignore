@@ -1,2 +1,4 @@
 .ipynb_checkpoints/
 house_prices/.ipynb_checkpoints/
+tabular_sep/predictions.csv
+tabular_sep/data/*

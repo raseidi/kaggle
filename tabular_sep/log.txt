@@ -1,0 +1,5 @@
+1st submission (September 8)
+    - Median imputation
+    - Centering data
+    - RF(n_estimators=500, max_depth=16)
+    - scoring 63%
